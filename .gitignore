@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+data/*.sqlite
+data/*.sqlite-*
+data/balance.json
+data/ff_calendar_cache.json
+logs/
+.venv/

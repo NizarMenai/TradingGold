@@ -1,0 +1,110 @@
+# GoldBot configuration: every tunable parameter lives here.
+# Secrets (API keys, phone numbers) go in .env, never in this file.
+
+[general]
+symbol = "XAU/USD"
+mode = "paper"                  # "paper" (default) or "live". Neither mode ever places trades.
+db_path = "data/goldbot.sqlite"
+balance_file = "data/balance.json"
+user_timezone = "UTC"           # IANA name of your local zone, e.g. "Africa/Casablanca"
+
+[data]
+provider = "twelvedata"         # name registered in goldbot/data/providers.py
+intervals = ["15min", "1h", "4h"]
+max_requests_per_minute = 7     # Twelve Data Basic allows 8/min. Keep 1 in reserve.
+max_requests_per_day = 780      # Twelve Data Basic allows 800/day
+request_outputsize = 5000       # Twelve Data maximum per request
+history_start = "2020-01-01"    # earliest date to backfill for backtests
+stale_after_minutes = 45        # alert if the newest closed 15m candle is older than this while the market is open
+
+[strategy]
+# Trend filter: both the 4h and the 1h must agree.
+trend_ema_fast = 50
+trend_ema_slow = 200
+require_price_above_fast = true # long only if the HTF close is above the fast EMA too (mirror for shorts)
+# 15m pullback and entry
+entry_ema = 21                  # 15m "value" EMA that price must pull back to
+pullback_bars = 6               # look back this many 15m bars for the pullback
+pullback_touch_atr = 0.25       # pullback counts if price came within this many ATRs of entry_ema
+momentum = "rsi"                # "rsi" or "macd"
+rsi_period = 14
+rsi_pullback_level = 45         # RSI must have dipped to <= this during the pullback (>= 100-this for shorts)
+rsi_trigger_level = 50          # and crossed back above this on the signal bar (below 100-this for shorts)
+macd_fast = 12
+macd_slow = 26
+macd_signal = 9
+# Structure: the pullback's swing low/high anchors the stop
+swing_lookback = 10             # bars to search for the pullback swing extreme
+structure_buffer_atr = 0.2      # stop sits this many ATRs beyond the swing extreme
+require_higher_low = true       # longs: pullback low must hold above the previous swing low (mirror for shorts)
+# Stops and targets
+atr_period = 14
+sl_atr_mult = 1.5               # minimum stop distance = sl_atr_mult x ATR
+max_sl_atr_mult = 3.0           # skip the setup if structure forces a stop wider than this
+tp1_r = 2.0                     # TP1 at 2R (minimum 1:2 as required)
+tp2_r = 3.0
+tp1_close_fraction = 0.5        # close this fraction at TP1 (only when the lot size can be split)
+move_sl_to_be_after_tp1 = true
+max_hold_hours = 24             # close at market if neither SL nor TP is hit
+flat_before_weekend = true      # close any open trade at Friday 16:30 New York time
+
+[sessions]
+# New signals only inside these windows (local exchange time, DST-aware).
+windows = [
+  { name = "London",   tz = "Europe/London",    start = "08:00", end = "16:00" },
+  { name = "New York", tz = "America/New_York", start = "08:00", end = "16:00" },
+]
+
+[news]
+provider = "static_csv"         # "static_csv" (backtest + live) or "static_csv+forexfactory" (live)
+calendar_file = "data/news_calendar.csv"
+events = ["NFP", "CPI", "FOMC"]
+block_minutes_before = 30
+block_minutes_after = 30
+forexfactory_url = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+forexfactory_refresh_hours = 6
+
+[costs]
+# Prices from the data feed are treated as mid. Values are in USD per ounce.
+spread = 0.30                   # typical retail XAU/USD spread (30 cents). Cent accounts are often wider.
+slippage_entry = 0.10           # market-order slippage on entry
+slippage_stop = 0.15            # stop orders slip; take-profit limit orders do not
+swap_long_annual_pct = 6.0      # financing charged on longs, % of notional per year
+swap_short_annual_pct = 1.0     # many brokers charge shorts too
+rollover_time_ny = "17:00"      # swap is charged when a position is held through this NY time
+triple_swap_weekday = 2         # Wednesday (0=Mon) charges 3 nights
+
+[account]
+type = "cent"                   # "standard", "micro" or "cent". See [account_types]
+starting_balance = 50.0         # USD
+risk_pct = 1.0                  # percent of balance risked per trade (hard cap 2.0)
+max_risk_pct = 2.0
+
+[account_types]
+# oz_per_lot: ounces of exposure per 1.00 lot, in real USD terms
+# min_lot / lot_step: what the broker accepts
+standard = { oz_per_lot = 100.0, min_lot = 0.01, lot_step = 0.01 }  # 0.01 lot = 1 oz
+micro    = { oz_per_lot = 10.0,  min_lot = 0.01, lot_step = 0.01 }  # 0.01 lot = 0.1 oz (varies by broker!)
+cent     = { oz_per_lot = 1.0,   min_lot = 0.01, lot_step = 0.01 }  # balance in US cents, 0.01 lot = 0.01 oz of real exposure
+
+[risk]
+max_open_signals = 1
+max_signals_per_day = 3
+max_losses_per_day = 2
+max_daily_loss_pct = 4.0
+day_boundary_tz = "UTC"
+
+[backtest]
+start = "2020-03-01"            # first ~5 weeks of cached data are indicator warm-up
+end = "2026-11-14"
+lockbox_start = "2025-11-14"    # last 12 months: reported separately, never used for design decisions
+initial_balance = 50.0
+chart_path = "reports/equity_curve.png"
+report_path = "reports/backtest_report.md"
+
+[walkforward]
+train_months = 12
+test_months = 3
+min_train_trades = 30
+# Deliberately tiny grid (8 combinations) to limit overfitting.
+grid = { sl_atr_mult = [1.5, 2.0], rsi_pullback_level = [40, 45], pullback_bars = [4, 8] }
